@@ -2,14 +2,12 @@ package br.com.lscamargo.photofamily
 
 import android.Manifest
 import android.app.Activity
-import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
@@ -18,7 +16,6 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
 import com.google.firebase.FirebaseApp
@@ -35,28 +32,26 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
         FirebaseApp.initializeApp(this)
-        var storage = FirebaseStorage.getInstance()
 
-        var mStorageRef = FirebaseStorage.getInstance().getReference();
+        val mStorageRef = FirebaseStorage.getInstance().reference;
         val btnCarrega = findViewById<Button>(R.id.btnCarregar)
         val btnEnviar = findViewById<Button>(R.id.btnEnviar)
         val imagem = findViewById<ImageView>(R.id.imgViewPhoto)
         val mprogress = findViewById<ProgressBar>(R.id.progressBar)
 
-        val getContent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()){ result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val data = result.data
-                val uri = data?.data
+        val getContent =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+                if (result.resultCode == Activity.RESULT_OK) {
+                    val data = result.data
+                    val uri = data?.data
 
-                val caminho = uri?.path
+                    Glide.with(this)
+                        .load(uri)
+                        .into(imagem)
 
-                Glide.with(this)
-                    .load(uri)
-                    .into(imagem)
+                }
 
             }
-
-        }
 
 
         fun chooseImageGallery() {
@@ -75,9 +70,10 @@ class MainActivity : AppCompatActivity() {
 
             val sdf = SimpleDateFormat("DD:MM:HH:mm:ss", Locale.getDefault())
             val hora = Calendar.getInstance().time
-            val nomearq = sdf.format(hora)+".jpg"
+            val nomearq = sdf.format(hora) + ".jpg"
 
-            val arqRef = mStorageRef.child("images/arq" + nomearq) //Cria uma referencia para o nome do arquivo que irá subir
+            val arqRef =
+                mStorageRef.child("images/arq" + nomearq) //Cria uma referencia para o nome do arquivo que irá subir
 
             val bitmap = (imagem.drawable as BitmapDrawable).bitmap
             val baos = ByteArrayOutputStream()
@@ -97,8 +93,8 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Upload OK", Toast.LENGTH_SHORT).show()
 
             }.addOnProgressListener {
-                var atualizaprogress = 100.0 * it.bytesTransferred / it.totalByteCount
-                mprogress.setProgress(atualizaprogress.toInt())
+                val atualizaprogress = 100.0 * it.bytesTransferred / it.totalByteCount
+                mprogress.progress = atualizaprogress.toInt()
             }
 
         }
@@ -108,36 +104,38 @@ class MainActivity : AppCompatActivity() {
             val IMAGE_CHOOSE = 1000;
             val PERMISSION_CODE = 1001;
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
-                if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)== PackageManager.PERMISSION_DENIED){
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
                     val permissions = arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
                     requestPermissions(permissions, PERMISSION_CODE)
-                } else{
+                } else {
                     chooseImageGallery();
-                    mprogress.setProgress(0)
+                    mprogress.progress = 0
                 }
-            }else{
+            } else {
                 chooseImageGallery();
             }
         }
 
     }
+
     @Override
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
 
 
-        val inflater : MenuInflater = menuInflater
+        val inflater: MenuInflater = menuInflater
         inflater.inflate(R.menu.menu, menu)
 
         return super.onCreateOptionsMenu(menu)
 
     }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
 
         return when (item.itemId) {
             R.id.menuAbrirGaleria -> {
 
-                val intent = Intent(this, imagesActivity::class.java)
+                val intent = Intent(this, ImagesActivity::class.java)
 
                 startActivity(intent)
 
@@ -146,7 +144,6 @@ class MainActivity : AppCompatActivity() {
             else -> super.onOptionsItemSelected(item)
         }
     }
-
 
 
 }
