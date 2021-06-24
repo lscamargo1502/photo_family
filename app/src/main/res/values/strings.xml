@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">photofamily</string>
+    <string name="title_activity_login">LoginActivity</string>
+    <string name="prompt_email">Email</string>
+    <string name="prompt_password">Senha</string>
+    <string name="action_sign_in">Entrar</string>
+    <string name="action_sign_in_short">Registrar</string>
+    <string name="welcome">"Bem vindo !"</string>
+    <string name="invalid_username">Not a valid username</string>
+    <string name="invalid_password">A senha deve ter no mínimo 5 caracteres!</string>
+    <string name="login_failed">"Login failed"</string>
 </resources>

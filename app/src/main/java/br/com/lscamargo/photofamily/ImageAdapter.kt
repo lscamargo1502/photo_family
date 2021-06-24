@@ -55,5 +55,8 @@ class ImageAdapter : RecyclerView.Adapter<ImageAdapter.ImageViewHolder>() {
             holder.bind(it.toString())
         }
     }
+    /*fun getItem(holder: ImageViewHolder): String  {
+        return urls[]
+    }*/
 
 }

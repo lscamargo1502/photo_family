@@ -4,4 +4,7 @@
 
     <item android:title="Abrir Galeria"
         android:id="@+id/menuAbrirGaleria"/>
+
+    <item android:title="Fazer logoff"
+        android:id="@+id/menuLogoff"/>
 </menu>
