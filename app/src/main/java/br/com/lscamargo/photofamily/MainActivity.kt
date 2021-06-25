@@ -2,6 +2,7 @@ package br.com.lscamargo.photofamily
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,13 +10,15 @@ import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
+import android.util.Log
+import android.util.Size
+import android.view.*
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import br.com.lscamargo.photofamily.ui.login.LoginActivity
 import com.bumptech.glide.Glide
 import com.google.firebase.FirebaseApp
@@ -29,15 +32,56 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
-//import com.google.android.gms.vision.label.internal.client.ImageLabelerOptions as ImageLabelerOptions1
+import androidx.camera.core.*
+import androidx.camera.core.Preview.*
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.core.content.FileProvider
+import androidx.core.view.isVisible
+import com.google.common.util.concurrent.ListenableFuture
+import java.io.File
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 
 class MainActivity : AppCompatActivity() {
-
+    private lateinit var cameraProviderFuture : ListenableFuture<ProcessCameraProvider>
     private lateinit var mAuth: FirebaseAuth
+    private var imageCapture: ImageCapture? = null
+
+    private lateinit var outputDirectory: File
+    private lateinit var cameraExecutor: ExecutorService
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+        outputDirectory = getOutputDirectory()
+
+        cameraExecutor = Executors.newSingleThreadExecutor()
+
+        if (allPermissionsGranted()) {
+            startCamera()
+        } else {
+            ActivityCompat.requestPermissions(
+                this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
+            )
+        }
+        val orientationEventListener = object : OrientationEventListener(this as Context) {
+            override fun onOrientationChanged(orientation : Int) {
+                // Monitors orientation values to determine the target rotation value
+                val rotation : Int = when (orientation) {
+                    in 45..134 -> Surface.ROTATION_270
+                    in 135..224 -> Surface.ROTATION_180
+                    in 225..314 -> Surface.ROTATION_90
+                    else -> Surface.ROTATION_0
+                }
+
+                imageCapture?.targetRotation = rotation
+            }
+        }
+        orientationEventListener.enable()
+
         mAuth = FirebaseAuth.getInstance()
 
         val user = mAuth.currentUser
@@ -63,7 +107,9 @@ class MainActivity : AppCompatActivity() {
         val imagem = findViewById<ImageView>(R.id.imgViewPhoto)
         val mprogress = findViewById<ProgressBar>(R.id.progressBar)
         val textDaImagem = findViewById<TextView>(R.id.textDadosDaImagem)
-
+        val btnCapturarFoto = findViewById<Button>(R.id.btnCapturarFoto)
+        val viewFinder = findViewById<PreviewView>(R.id.viewFinder)
+        viewFinder.isVisible = true
         btnEnviar.isEnabled = false
 
         val getContent =
@@ -152,6 +198,8 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Upload OK", Toast.LENGTH_SHORT).show()
 
                     btnEnviar.isEnabled = false
+                    viewFinder.isVisible = true
+
 
 
                 }.addOnProgressListener {
@@ -176,17 +224,182 @@ class MainActivity : AppCompatActivity() {
                     chooseImageGallery();
                     mprogress.progress = 0
                     btnEnviar.isEnabled = true
+                    viewFinder.isVisible = false
                 }
             } else {
                 chooseImageGallery()
                 //if(imagem.drawable != null){
                 btnEnviar.isEnabled = true
+                viewFinder.isVisible = false
 
             }
         }
+        btnCapturarFoto.setOnClickListener {
+            takePhoto()
+            viewFinder.isVisible = false
+
+        }
 
     }
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<String>, grantResults:
+        IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            if (allPermissionsGranted()) {
+                startCamera()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Permissões nao concedidas pelo usuário!:(",
+                    Toast.LENGTH_SHORT
+                ).show()
+                finish()
+            }
+        }
+    }
+    private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
+        ContextCompat.checkSelfPermission(
+            baseContext, it
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+    companion object {
+        private const val TAG = "SPC"
+        private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
+        private const val REQUEST_CODE_PERMISSIONS = 10
+        private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
+    }
 
+    private fun getOutputDirectory(): File {
+        val mediaDir = externalMediaDirs.firstOrNull()?.let {
+            File(it, "Photo Family").apply { mkdirs() }
+        }
+        return if (mediaDir != null && mediaDir.exists())
+            mediaDir else filesDir
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraExecutor.shutdown()
+    }
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+
+
+        cameraProviderFuture.addListener({
+            // Used to bind the lifecycle of cameras to the lifecycle owner
+            val viewFinder = findViewById<PreviewView>(R.id.viewFinder)
+            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+
+            // Preview
+            val preview = Builder()
+                .build().also {
+                    it.setSurfaceProvider(viewFinder.surfaceProvider)
+                }
+
+            imageCapture = ImageCapture.Builder()
+                .setTargetResolution(Size(480, 640))
+
+                .build()
+
+
+            // Select back camera as a default
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+            try {
+                // Unbind use cases before rebinding
+                cameraProvider.unbindAll()
+
+                // Bind use cases to camera
+                cameraProvider.bindToLifecycle(
+                    this, cameraSelector, preview, imageCapture
+                )
+
+            } catch (exc: Exception) {
+                Log.e(TAG, "Use case binding failed", exc)
+            }
+
+        }, ContextCompat.getMainExecutor(this))
+    }
+    private fun takePhoto() {
+        // Get a stable reference of the modifiable image capture use case
+        val imageCapture = imageCapture ?: return
+
+        // Create time-stamped output file to hold the image
+        val photoFile = File(
+            outputDirectory,
+            SimpleDateFormat(
+                FILENAME_FORMAT, Locale.US
+            ).format(System.currentTimeMillis()) + ".jpg"
+        )
+
+        // Create output options object which contains file + metadata
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        // Set up image capture listener, which is triggered after photo has
+        // been taken
+
+
+        imageCapture.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onError(exc: ImageCaptureException) {
+                    Log.e(TAG, "Captura falhou :(: ${exc.message}", exc)
+                }
+
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    val msg = "Foto salva com sucesso! :)"
+                    val imagem = findViewById<ImageView>(R.id.imgViewPhoto)
+                    val viewFinder = findViewById<PreviewView>(R.id.viewFinder)
+                    val textDaImagem = findViewById<TextView>(R.id.textDadosDaImagem)
+                    val btnEnviar = findViewById<Button>(R.id.btnEnviar)
+
+                    val imageUri = FileProvider.getUriForFile(
+                        this@MainActivity,
+                        "br.com.lscamargo.photofamily.provider",
+                        photoFile
+                    )
+                    Glide.with(this@MainActivity)
+                        .load(imageUri)
+                        .into(imagem)
+
+
+                    val image: InputImage
+                    try {
+                        image = InputImage.fromFilePath(this@MainActivity, imageUri)
+                        val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
+                        labeler.process(image)
+                            .addOnSuccessListener { labels ->
+                                var text = ""
+                                var confidence = 0
+                                var index = 0
+
+                                for (label in labels) {
+                                    text = label.text + ", " + text
+                                    //confidence = label.confidence.toInt()
+                                    //index = label.index
+                                }
+                                textDaImagem.text = text
+                                btnEnviar.isEnabled = true
+
+
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(this@MainActivity, "Processou e NAO encontrou algo na imagem", Toast.LENGTH_SHORT).show()
+
+                            }
+
+
+                    } catch (e: IOException) {
+                        e.printStackTrace()
+                    }
+
+
+                }
+            })
+    }
     @Override
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
 
