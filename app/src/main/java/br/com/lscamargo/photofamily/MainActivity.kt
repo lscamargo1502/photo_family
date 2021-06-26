@@ -197,14 +197,15 @@ class MainActivity : AppCompatActivity() {
                 }.addOnSuccessListener { taskSnapshot ->
                     Toast.makeText(this, "Upload OK", Toast.LENGTH_SHORT).show()
 
-                    btnEnviar.isEnabled = false
                     viewFinder.isVisible = true
-
-
+                    btnCapturarFoto.text = "Capturar Foto"
+                    textDaImagem.text = ""
+                    btnEnviar.isEnabled = false
 
                 }.addOnProgressListener {
                     val atualizaprogress = 100.0 * it.bytesTransferred / it.totalByteCount
                     mprogress.progress = atualizaprogress.toInt()
+                    viewFinder.isVisible = true
                 }
             }
 
@@ -225,18 +226,26 @@ class MainActivity : AppCompatActivity() {
                     mprogress.progress = 0
                     btnEnviar.isEnabled = true
                     viewFinder.isVisible = false
+                    mprogress.progress = 0
                 }
             } else {
                 chooseImageGallery()
                 //if(imagem.drawable != null){
                 btnEnviar.isEnabled = true
                 viewFinder.isVisible = false
+                mprogress.progress = 0
 
             }
         }
         btnCapturarFoto.setOnClickListener {
-            takePhoto()
-            viewFinder.isVisible = false
+            if(btnCapturarFoto.text == "Capturar Foto") {
+                takePhoto()
+                viewFinder.isVisible = false
+                btnCapturarFoto.text = "Capturar nova foto"
+            }else{
+                viewFinder.isVisible= true
+                btnCapturarFoto.text = "Capturar Foto"
+            }
 
         }
 
